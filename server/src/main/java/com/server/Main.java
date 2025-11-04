@@ -91,11 +91,6 @@ public class Main {
                     }
                 }while(testInputPos(pos));
             }
-    
-            
-            
-            
-            
             
              //chiudo la porta
             
