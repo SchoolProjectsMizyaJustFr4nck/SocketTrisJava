@@ -1,163 +1,145 @@
 package com.server;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
-import java.net.Socket;
-//Server
+import java.io.*;
+import java.net.*;
+
 public class Main {
 
-    static int [] gameBoard = {0, 0, 0, 0, 0, 0, 0, 0, 0};
-    static int pos = 0;
-    static int p1 = 1;
-    static int p2 = 2;
+    static int[] gameBoard = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    static final int P1 = 1;
+    static final int P2 = 2;
 
-   
+    static final int[][] winCombinations = {
+        {0, 1, 2}, {3, 4, 5}, {6, 7, 8},
+        {0, 3, 6}, {1, 4, 7}, {2, 5, 8},
+        {0, 4, 8}, {2, 4, 6}
+    };
 
-    static int[][] winCombinations = {
-            {0, 1, 2}, // prima riga
-            {3, 4, 5}, // seconda riga
-            {6, 7, 8}, // terza riga
-            {0, 3, 6}, // prima colonna
-            {1, 4, 7}, // seconda colonna
-            {2, 5, 8}, // terza colonna
-            {0, 4, 8}, // diagonale principale
-            {2, 4, 6}  // diagonale secondaria
-        };
-    
-        public static void main(String[] args) throws IOException {
-            
-            System.out.println("Server socket in ascolto sulla porta 3000");
-            ServerSocket ss = new ServerSocket(3000);   //apro server socket sulla porta 3000
-            
-            //UTENTE 1
-            Socket myS1 = ss.accept();                        //crea un socket in ascolta da server, accept blocca, finche qualcuno non si collega alla porta 3000
-            System.out.println("Si è collegato il primo utente con ip: " + myS1.getInetAddress());
-            BufferedReader in1 = new BufferedReader(new InputStreamReader(myS1.getInputStream()));
-            PrintWriter out1 = new PrintWriter(myS1.getOutputStream(), true);
+    public static void main(String[] args) {
+        try (ServerSocket serverSocket = new ServerSocket(3000)) {
+            System.out.println("Server in ascolto sulla porta 3000...");
+
+            // Connessione primo giocatore
+            Socket s1 = serverSocket.accept();
+            System.out.println("Giocatore 1 connesso da " + s1.getInetAddress());
+            BufferedReader in1 = new BufferedReader(new InputStreamReader(s1.getInputStream()));
+            PrintWriter out1 = new PrintWriter(s1.getOutputStream(), true);
             out1.println("WAIT");
-    
-            //UTENTE 2
-            Socket myS2 = ss.accept();
-            System.out.println("Si è collegato il primo utente con ip: " + myS2.getInetAddress());
-            BufferedReader in2 = new BufferedReader(new InputStreamReader(myS2.getInputStream()));
-            PrintWriter out2 = new PrintWriter(myS2.getOutputStream(), true);
+
+            // Connessione secondo giocatore
+            Socket s2 = serverSocket.accept();
+            System.out.println("Giocatore 2 connesso da " + s2.getInetAddress());
+            BufferedReader in2 = new BufferedReader(new InputStreamReader(s2.getInputStream()));
+            PrintWriter out2 = new PrintWriter(s2.getOutputStream(), true);
+
             out1.println("READY");
             out2.println("READY");
 
+            int currentPlayer = P1;
+            BufferedReader currentIn = in1;
+            PrintWriter currentOut = out1;
+            PrintWriter opponentOut = out2;
 
-            int currentPlayer = p1;  
-            BufferedReader currentInput = in1;  
-            PrintWriter currentOutput = out1;  
-            BufferedReader otherInput = in2;  
-            PrintWriter otherOutput = out2;    
-
-            while(true){
-
-                do{
-                    pos = Integer.parseInt(currentInput.readLine());
-                    if(!testInputPos(pos) || !checkIfExist(pos)){
-                        currentOutput.println("KO");
-                    } 
-                    else if(winCondition(gameBoard, currentPlayer)){
-                        addVal(gameBoard, pos, currentPlayer);
-                        currentOutput.println("W");
-                        otherOutput.println(printArr(gameBoard) + ", L");
-                        ss.close(); 
-                        return;
-                    }
-                    else if(checkTie(gameBoard)){
-                        addVal(gameBoard, pos, currentPlayer);
-                        currentOutput.println("P");
-                        otherOutput.println("P");
-                        ss.close();
-                        return;
-                    }
-                    else{
-                        addVal(gameBoard, pos, currentPlayer);
-                        currentOutput.println("OK");
-                        otherOutput.println(printArr(gameBoard));
+            while (true) {
+                try {
+                    String line = currentIn.readLine();
+                    if (line == null) {
+                        opponentOut.println("DISCONNECTED");
+                        break;
                     }
 
-                    if (currentPlayer == p1) {
-                        currentPlayer = p2;
-                        currentInput = in2;
-                        currentOutput = out2;
-                        otherInput = in1;
-                        otherOutput = out1;
+                    int pos;
+                    try {
+                        pos = Integer.parseInt(line);
+                    } catch (NumberFormatException e) {
+                        currentOut.println("KO");
+                        continue;
+                    }
+
+                    if (!isValidPos(pos) || !isEmpty(pos)) {
+                        currentOut.println("KO");
+                        continue;
+                    }
+
+                    gameBoard[pos] = currentPlayer;
+
+                    if (checkWin(currentPlayer)) {
+                        currentOut.println("W");
+                        opponentOut.println(buildBoardString() + "L");
+                        break;
+                    }
+
+                    if (checkTie()) {
+                        currentOut.println("P");
+                        opponentOut.println(buildBoardString() + "P");
+                        break;
+                    }
+
+                    currentOut.println("OK");
+                    opponentOut.println(buildBoardString());
+
+                    if (currentPlayer == P1) {
+                        currentPlayer = P2;
+                        currentIn = in2;
+                        currentOut = out2;
+                        opponentOut = out1;
                     } else {
-                        currentPlayer = p1;
-                        currentInput = in1;
-                        currentOutput = out1;
-                        otherInput = in2;
-                        otherOutput = out2;
+                        currentPlayer = P1;
+                        currentIn = in1;
+                        currentOut = out1;
+                        opponentOut = out2;
                     }
-                }while(!testInputPos(pos) || !checkIfExist(pos));
-            }
-            
-            
-            
-        }
-    
-    
-        static public Boolean testInputPos(int pos){
-            return pos >= 0 && pos < 8;
-        }
-    
-        static public Boolean checkIfExist(int pos){
-    
-            if(gameBoard[pos] != 0){
-    
-                return false;
-            }
-          
-            return true;
-        }
 
-        static public void addVal(int gameBoard[], int pos, int p){
-
-            gameBoard[pos] = p;
-        }
-    
-        static public String printArr(int gameBoard[]){
-            StringBuilder s = new StringBuilder();
-    
-            for (int i = 0; i < gameBoard.length; i++) {
-                s.append(gameBoard[i]);  
-                if (i < gameBoard.length - 1) {
-                    s.append(", "); 
+                } catch (IOException e) {
+                    System.out.println("Errore di comunicazione: " + e.getMessage());
+                    break;
                 }
             }
-    
-            return s.toString();
-        }
-    
-        static public Boolean winCondition(int gameBoard [], int p){
-            for (int[] combination : winCombinations) {
-                if (gameBoard[combination[0]] == p &&
-                gameBoard[combination[1]] == p &&
-                gameBoard[combination[2]] == p) {
-                return true; 
-                }
-            }
-        return false;
-        }
 
-        static public Boolean checkTie(int gameBoard []){
-            
-            for(int i = 0; i < gameBoard.length; i++){
+            s1.close();
+            s2.close();
+            System.out.println("Partita terminata, connessioni chiuse.");
 
-                if(gameBoard[i] == 0){
-
-                    return false;
-                }
-            }
-            return true;
+        } catch (IOException e) {
+            System.err.println("Errore server: " + e.getMessage());
         }
-        
     }
 
-//10.22.9.6
+    // === Metodi di supporto ===
 
+    static boolean isValidPos(int pos) {
+        return pos >= 0 && pos <= 8;
+    }
+
+    static boolean isEmpty(int pos) {
+        return gameBoard[pos] == 0;
+    }
+
+    static boolean checkWin(int player) {
+        for (int[] combo : winCombinations) {
+            if (gameBoard[combo[0]] == player &&
+                gameBoard[combo[1]] == player &&
+                gameBoard[combo[2]] == player) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static boolean checkTie() {
+        for (int i : gameBoard)
+            if (i == 0)
+                return false;
+        return true;
+    }
+
+    static String buildBoardString() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < gameBoard.length; i++) {
+            sb.append(gameBoard[i]);
+            sb.append(",");
+        }
+        sb.append(""); 
+        return sb.toString();
+    }
+}
